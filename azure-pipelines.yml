@@ -1,0 +1,69 @@
+trigger:
+- master
+
+pr:
+- '*'
+
+pool:
+  vmImage: 'windows-latest'
+
+parameters:
+- name: deployEnvironment
+  displayName: 'Environment to Deploy'
+  type: string
+  values:
+    - 'Blue'
+    - 'Green'
+  default: 'Blue'
+
+variables:
+  azureServicePrincipalId: <spID>
+  azureServicePrincipalKey: <spKey>
+  azureTenantId: <tenantID>
+  resourceGroupName: <rgName>
+  storageAccountBlue: <storageAccount1>
+  storageAccountGreen: <storageAccount2>
+  deployEnvironment: ${{ parameters.deployEnvironment }}
+
+stages:
+- stage: BuildInfrastructure
+  jobs:
+  - job: BuildInfrastructure
+    steps:
+    - script: |
+        az login --service-principal -u $(azureServicePrincipalId) -p $(azureServicePrincipalKey) --tenant $(azureTenantId)
+      displayName: 'Azure Login'
+    - script: |
+        az group deployment create --resource-group $(resourceGroupName) --template-file .\template.json
+      displayName: 'Deploy Template'
+    - task: AzurePowerShell@5
+      inputs:
+        azureSubscription: 'Pay-As-You-Go(a355c32e-4a22-4b05-aab4-be236850fa6e)'
+        ScriptType: 'InlineScript'
+        Inline: |
+          #We need to replace data variables with actual values
+          install-module pester -force
+          $container = New-PesterContainer -Path .\TestAzureCDN.ps1 -Data @{rgName="<rgName>";cdnProfileName="<cndProfileName>";stgAcc1="<saAcct1>";stgAcc2="<saAcct2>";cdnEp1="<cdnEp1>";cdnEp2="<cdnEp2>"}
+                    
+          invoke-pester -container $container -output detailed
+        azurePowerShellVersion: 'LatestVersion'
+- stage: DeploytoEnv
+  jobs:
+  - job: DeploytoBlue
+    condition: and(succeeded(), eq(variables['deployEnvironment'], 'Blue'))
+    steps:
+    - script: |
+        az login --service-principal -u $(azureServicePrincipalId) -p $(azureServicePrincipalKey) --tenant $(azureTenantId)
+      displayName: 'LogintoAz'
+    - script: |    
+        az storage blob upload --account-name $(storageAccountBlue) --container-name $web --name index.html --file $(System.DefaultWorkingDirectory)/latestCode/index.html --overwrite
+      displayName: 'DeploytoBlueApp'
+  - job: DeploytoGreeen
+    condition: and(succeeded(), eq(variables['deployEnvironment'], 'Green'))
+    steps: 
+    - script: |
+        az login --service-principal -u $(azureServicePrincipalId) -p $(azureServicePrincipalKey) --tenant $(azureTenantId)
+      displayName: 'LogintoAz'
+    - script: |    
+        az storage blob upload --account-name $(storageAccountGreen) --container-name $web --name index-green.html --file $(System.DefaultWorkingDirectory)/latestCode/index.html --overwrite
+      displayName: 'DeploytoGreenApp'

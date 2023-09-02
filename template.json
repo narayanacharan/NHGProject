@@ -1,0 +1,338 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "location": {
+        "type": "string",
+        "defaultValue": "[resourceGroup().location]",
+        "metadata": {
+          "description": "The location into which the resources should be deployed."
+        }
+      },
+      "storageSku": {
+        "type": "string",
+        "defaultValue": "Standard_LRS",
+        "metadata": {
+          "description": "The storage account SKU name."
+        },
+        "allowedValues": [
+          "Standard_LRS",
+          "Standard_GRS",
+          "Standard_ZRS",
+          "Premium_LRS"
+        ]
+      },
+      "blueIndexDocumentPath": {
+        "type": "string",
+        "defaultValue": "index.html",
+        "metadata": {
+          "description": "The path to the Blue deployment web index document."
+        }
+      },
+      "blueIndexDocumentContents": {
+        "type": "string",
+        "defaultValue": "<h1>Blue Deployment: Example static website v1</h1>",
+        "metadata": {
+          "description": "The contents of the Blue deployment web index document."
+        }
+      },
+      "blueErrorDocument404Path": {
+        "type": "string",
+        "defaultValue": "error.html",
+        "metadata": {
+          "description": "The path to the Blue deployment web error document."
+        }
+      },
+      "blueErrorDocument404Contents": {
+        "type": "string",
+        "defaultValue": "<h1>Blue Deployment: Example 404 error page v1</h1>",
+        "metadata": {
+          "description": "The contents of the Blue deployment web error document."
+        }
+      },
+      "greenIndexDocumentPath": {
+        "type": "string",
+        "defaultValue": "index-green.html",
+        "metadata": {
+          "description": "The path to the Green deployment web index document."
+        }
+      },
+      "greenIndexDocumentContents": {
+        "type": "string",
+        "defaultValue": "<h1>Green Deployment: Example static website v2</h1>",
+        "metadata": {
+          "description": "The contents of the Green deployment web index document."
+        }
+      },
+      "greenErrorDocument404Path": {
+        "type": "string",
+        "defaultValue": "error-green.html",
+        "metadata": {
+          "description": "The path to the Green deployment web error document."
+        }
+      },
+      "greenErrorDocument404Contents": {
+        "type": "string",
+        "defaultValue": "<h1>Green Deployment: Example 404 error page v2</h1>",
+        "metadata": {
+          "description": "The contents of the Green deployment web error document."
+        }
+      }
+    },
+    "variables": {
+      "uniqueStringSuffix": "[uniqueString(resourceGroup().id)]",
+      "storageAccountName1": "[format('storage1{0}', variables('uniqueStringSuffix'))]",
+      "storageAccountName2": "[format('storage2{0}', variables('uniqueStringSuffix'))]",
+      "endpointName1": "[format('blue-{0}', variables('uniqueStringSuffix'))]",
+      "endpointName2": "[format('green-{0}', variables('uniqueStringSuffix'))]",
+      "profileName": "[format('cdn-{0}', variables('uniqueStringSuffix'))]",
+      "deploymentScript1Name": "DeploymentScript1",
+      "deploymentScript2Name": "DeploymentScript2",
+      "managedIdentity1Name": "ManagedIdentity1",
+      "managedIdentity2Name": "ManagedIdentity2"
+    },
+    "resources": [
+      {
+        "type": "Microsoft.Storage/storageAccounts",
+        "apiVersion": "2021-06-01",
+        "name": "[variables('storageAccountName1')]",
+        "location": "[parameters('location')]",
+        "kind": "StorageV2",
+        "sku": {
+          "name": "[parameters('storageSku')]"
+        }
+      },
+      {
+        "type": "Microsoft.Storage/storageAccounts",
+        "apiVersion": "2021-06-01",
+        "name": "[variables('storageAccountName2')]",
+        "location": "[parameters('location')]",
+        "kind": "StorageV2",
+        "sku": {
+          "name": "[parameters('storageSku')]"
+        }
+      },
+      {
+        "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+        "apiVersion": "2018-11-30",
+        "name": "[variables('managedIdentity1Name')]",
+        "location": "[parameters('location')]"
+      },
+      {
+        "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+        "apiVersion": "2018-11-30",
+        "name": "[variables('managedIdentity2Name')]",
+        "location": "[parameters('location')]"
+      },
+      {
+        "type": "Microsoft.Authorization/roleAssignments",
+        "apiVersion": "2020-04-01-preview",
+        "name": "[guid(resourceGroup().id, resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentity1Name')), subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '17d1049b-9a84-46fb-8f53-869881c3d3ab'))]",
+        "scope": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName1'))]",
+        "properties": {
+          "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '17d1049b-9a84-46fb-8f53-869881c3d3ab')]",
+          "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentity1Name'))).principalId]",
+          "principalType": "ServicePrincipal"
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentity1Name'))]",
+          "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName1'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Authorization/roleAssignments",
+        "apiVersion": "2020-04-01-preview",
+        "name": "[guid(resourceGroup().id, resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentity2Name')), subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '17d1049b-9a84-46fb-8f53-869881c3d3ab'))]",
+        "scope": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName2'))]",
+        "properties": {
+          "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '17d1049b-9a84-46fb-8f53-869881c3d3ab')]",
+          "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentity2Name'))).principalId]",
+          "principalType": "ServicePrincipal"
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentity2Name'))]",
+          "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName2'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Resources/deploymentScripts",
+        "apiVersion": "2020-10-01",
+        "name": "[variables('deploymentScript1Name')]",
+        "location": "[parameters('location')]",
+        "kind": "AzurePowerShell",
+        "identity": {
+          "type": "UserAssigned",
+          "userAssignedIdentities": {
+            "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentity1Name')))]": {}
+          }
+        },
+        "properties": {
+          "azPowerShellVersion": "3.0",
+          "scriptContent": "$ErrorActionPreference = 'Stop'\n$storageAccount = Get-AzStorageAccount -ResourceGroupName $env:ResourceGroupName -AccountName $env:StorageAccountName\n\n# Enable the static website feature on the storage account.\n$ctx = $storageAccount.Context\nEnable-AzStorageStaticWebsite -Context $ctx -IndexDocument $env:BlueIndexDocumentPath -ErrorDocument404Path $env:BlueErrorDocument404Path\n\n# Add the two HTML pages for Blue deployment.\n$tempIndexFile = New-TemporaryFile\nSet-Content $tempIndexFile $env:BlueIndexDocumentContents -Force\nSet-AzStorageBlobContent -Context $ctx -Container '$web' -File $tempIndexFile -Blob $env:BlueIndexDocumentPath -Properties @{'ContentType' = 'text/html'} -Force\n\n$tempErrorDocument404File = New-TemporaryFile\nSet-Content $tempErrorDocument404File $env:BlueErrorDocument404Contents -Force\nSet-AzStorageBlobContent -Context $ctx -Container '$web' -File $tempErrorDocument404File -Blob $env:BlueErrorDocument404Path -Properties @{'ContentType' = 'text/html'} -Force\n",
+          "retentionInterval": "PT4H",
+          "environmentVariables": [
+            {
+              "name": "ResourceGroupName",
+              "value": "[resourceGroup().name]"
+            },
+            {
+              "name": "StorageAccountName",
+              "value": "[variables('storageAccountName1')]"
+            },
+            {
+              "name": "BlueIndexDocumentPath",
+              "value": "[parameters('blueIndexDocumentPath')]"
+            },
+            {
+              "name": "BlueIndexDocumentContents",
+              "value": "[parameters('blueIndexDocumentContents')]"
+            },
+            {
+              "name": "BlueErrorDocument404Path",
+              "value": "[parameters('blueErrorDocument404Path')]"
+            },
+            {
+              "name": "BlueErrorDocument404Contents",
+              "value": "[parameters('blueErrorDocument404Contents')]"
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentity1Name'))]",
+          "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName1'))]",
+          "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName2'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Resources/deploymentScripts",
+        "apiVersion": "2020-10-01",
+        "name": "[variables('deploymentScript2Name')]",
+        "location": "[parameters('location')]",
+        "kind": "AzurePowerShell",
+        "identity": {
+          "type": "UserAssigned",
+          "userAssignedIdentities": {
+            "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentity2Name')))]": {}
+          }
+        },
+        "properties": {
+          "azPowerShellVersion": "3.0",
+          "scriptContent": "$ErrorActionPreference = 'Stop'\n$storageAccount = Get-AzStorageAccount -ResourceGroupName $env:ResourceGroupName -AccountName $env:StorageAccountName\n\n# Enable the static website feature on the storage account.\n$ctx = $storageAccount.Context\nEnable-AzStorageStaticWebsite -Context $ctx -IndexDocument $env:GreenIndexDocumentPath -ErrorDocument404Path $env:GreenErrorDocument404Path\n\n# Add the two HTML pages for Green deployment.\n$tempIndexFile = New-TemporaryFile\nSet-Content $tempIndexFile $env:GreenIndexDocumentContents -Force\nSet-AzStorageBlobContent -Context $ctx -Container '$web' -File $tempIndexFile -Blob $env:GreenIndexDocumentPath -Properties @{'ContentType' = 'text/html'} -Force\n\n$tempErrorDocument404File = New-TemporaryFile\nSet-Content $tempErrorDocument404File $env:GreenErrorDocument404Contents -Force\nSet-AzStorageBlobContent -Context $ctx -Container '$web' -File $tempErrorDocument404File -Blob $env:GreenErrorDocument404Path -Properties @{'ContentType' = 'text/html'} -Force\n",
+          "retentionInterval": "PT4H",
+          "environmentVariables": [
+            {
+              "name": "ResourceGroupName",
+              "value": "[resourceGroup().name]"
+            },
+            {
+              "name": "StorageAccountName",
+              "value": "[variables('storageAccountName2')]"
+            },
+            {
+              "name": "GreenIndexDocumentPath",
+              "value": "[parameters('greenIndexDocumentPath')]"
+            },
+            {
+              "name": "GreenIndexDocumentContents",
+              "value": "[parameters('greenIndexDocumentContents')]"
+            },
+            {
+              "name": "GreenErrorDocument404Path",
+              "value": "[parameters('greenErrorDocument404Path')]"
+            },
+            {
+              "name": "GreenErrorDocument404Contents",
+              "value": "[parameters('greenErrorDocument404Contents')]"
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('managedIdentity2Name'))]",
+          "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName2'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Cdn/profiles",
+        "apiVersion": "2021-06-01",
+        "name": "[variables('profileName')]",
+        "location": "[parameters('location')]",
+        "tags": {
+          "displayName": "[variables('profileName')]"
+        },
+        "sku": {
+          "name": "Standard_Microsoft"
+        }
+      },
+      {
+        "type": "Microsoft.Cdn/profiles/endpoints",
+        "apiVersion": "2021-06-01",
+        "name": "[format('{0}/{1}', variables('profileName'), variables('endpointName1'))]",
+        "location": "[parameters('location')]",
+        "tags": {
+          "displayName": "[variables('endpointName1')]"
+        },
+        "properties": {
+          "originHostHeader": "[replace(replace(reference(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName1'))).primaryEndpoints.web, 'https://', ''), '/', '')]",
+          "isHttpAllowed": true,
+          "isHttpsAllowed": true,
+          "queryStringCachingBehavior": "IgnoreQueryString",
+          "contentTypesToCompress": [
+            "text/plain",
+            "text/html",
+            "text/css",
+            "application/x-javascript",
+            "text/javascript"
+          ],
+          "isCompressionEnabled": true,
+          "origins": [
+            {
+              "name": "origin1",
+              "properties": {
+                "hostName": "[replace(replace(reference(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName1'))).primaryEndpoints.web, 'https://', ''), '/', '')]"
+              }
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Cdn/profiles', variables('profileName'))]",
+          "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName1'))]"
+        ]
+      },
+      {
+        "type": "Microsoft.Cdn/profiles/endpoints",
+        "apiVersion": "2021-06-01",
+        "name": "[format('{0}/{1}', variables('profileName'), variables('endpointName2'))]",
+        "location": "[parameters('location')]",
+        "tags": {
+          "displayName": "[variables('endpointName2')]"
+        },
+        "properties": {
+          "originHostHeader": "[replace(replace(reference(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName2'))).primaryEndpoints.web, 'https://', ''), '/', '')]",
+          "isHttpAllowed": true,
+          "isHttpsAllowed": true,
+          "queryStringCachingBehavior": "IgnoreQueryString",
+          "contentTypesToCompress": [
+            "text/plain",
+            "text/html",
+            "text/css",
+            "application/x-javascript",
+            "text/javascript"
+          ],
+          "isCompressionEnabled": true,
+          "origins": [
+            {
+              "name": "origin2",
+              "properties": {
+                "hostName": "[replace(replace(reference(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName2'))).primaryEndpoints.web, 'https://', ''), '/', '')]"
+              }
+            }
+          ]
+        },
+        "dependsOn": [
+          "[resourceId('Microsoft.Cdn/profiles', variables('profileName'))]",
+          "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName2'))]"
+        ]
+      }
+    ]
+  }
+  
